@@ -1,0 +1,6 @@
+{
+	"name": "pi-automode",
+	"pi": {
+		"extensions": ["./src/index.ts"]
+	}
+}
