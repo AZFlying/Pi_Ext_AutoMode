@@ -1,5 +1,5 @@
 // 静态分类器：白/灰/黑，纯函数无副作用，规则全为常量（随手可改）
-// 判定顺序：黑名单最优先（防 echo $(rm -rf /) 借无害首 token 溜过）
+// 判定顺序：全串正则黑名单 → 复合命令拆段 → 段级黑名单/白名单，取最坏结果
 
 export type Verdict =
 	| { kind: "whitelist" }
@@ -14,7 +14,7 @@ const REDIRECT_TO_DEVICE = />\s*\/dev\/(sd|nvme|vd)/;
 const FORK_BOMB = /:\(\)\s*\{/;
 const GIT_NO_FORCE = /(^|\s)(-f\b|--force(?![\w-]))/; // -f/--force 在任意位置；--force-with-lease 是安全变体，不拦
 
-// git 子命令分桶（首 token 后跟子命令，两级匹配）
+// git 子命令分桶（两级匹配：git <subcmd> ...）
 const GIT_BLACK: Record<string, (args: string) => string | null> = {
 	push: (a) => (GIT_NO_FORCE.test(a) ? "git push --force" : null),
 	reset: (a) => (a.includes("--hard") ? "git reset --hard" : null),
@@ -50,28 +50,43 @@ function classifyGit(sub: string, rest: string): Verdict {
 	return { kind: "gray" };
 }
 
-export function classify(command: string): Verdict {
-	const tokens = command.trim().split(/\s+/);
-	const [cmd, ...args] = tokens;
+// 单段分类（段内无 && || ; | & 换行）
+function classifySegment(seg: string): Verdict {
+	const [cmd, ...args] = seg.trim().split(/\s+/);
 	const rest = args.join(" ");
 	if (!cmd) return { kind: "gray" };
 
-	// 黑名单（正则扫全串）
-	if (DANGEROUS_FLAGS.test(command)) return { kind: "blacklist", rule: "rm -r/-f" };
+	// 段级黑名单（首 token 门控）
 	if (cmd === "sudo") return { kind: "blacklist", rule: "sudo" };
 	if (cmd.startsWith("mkfs")) return { kind: "blacklist", rule: "mkfs" };
 	if (cmd === "dd" && /of=/.test(rest)) return { kind: "blacklist", rule: "dd of=" };
 	if (cmd === "chmod" && rest.includes("777")) return { kind: "blacklist", rule: "chmod 777" };
+
+	// 白名单（仅纯命令：无 shell 元字符）
+	if (!HAS_METACHARS.test(seg)) {
+		if (cmd === "git" && args[0]) return classifyGit(args[0], args.slice(1).join(" "));
+		if (cmd === "git") return { kind: "gray" };
+		if (READ_ONLY_CMDS.has(cmd)) return { kind: "whitelist" };
+	}
+	return { kind: "gray" };
+}
+
+export function classify(command: string): Verdict {
+	// 全串正则黑名单（必须在拆段前：拆段会吃掉 |，管道类规则就再也匹配不上了）
+	if (DANGEROUS_FLAGS.test(command)) return { kind: "blacklist", rule: "rm -r/-f" };
 	if (PIPE_TO_SHELL.test(command)) return { kind: "blacklist", rule: "pipe to shell" };
 	if (REDIRECT_TO_DEVICE.test(command)) return { kind: "blacklist", rule: "> /dev/sd*" };
 	if (FORK_BOMB.test(command)) return { kind: "blacklist", rule: "fork bomb" };
 
-	// 白名单（仅纯命令：无 shell 元字符）
-	if (!HAS_METACHARS.test(command)) {
-		if (cmd === "git" && args[0]) return classifyGit(args[0], args.slice(1).join(" "));
-		if (cmd === "git" && !args[0]) return { kind: "gray" };
-		if (READ_ONLY_CMDS.has(cmd)) return { kind: "whitelist" };
+	// 复合命令拆段（&& || ; | & 换行），逐段分类取最坏结果：
+	// cd x && git push --force 不能因首 token 是 cd 而溜过 git 黑桶
+	const segments = command.split(/\r|\n|&&|\|\||[;|&]/).filter((s) => s.trim());
+	if (segments.length === 0) return { kind: "gray" };
+	let worst: Verdict = { kind: "whitelist" };
+	for (const seg of segments) {
+		const v = classifySegment(seg);
+		if (v.kind === "blacklist") return v; // 最坏，立即返回
+		if (v.kind === "gray") worst = v;
 	}
-
-	return { kind: "gray" };
+	return worst;
 }
