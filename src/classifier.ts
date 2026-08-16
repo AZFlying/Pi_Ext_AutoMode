@@ -12,7 +12,7 @@ const DANGEROUS_FLAGS = /\brm\s+-{1,2}[a-zA-Z]*[rf]/; // rm 的 flag 含 r 或 f
 const PIPE_TO_SHELL = /\|\s*(sudo\s+)?(sh|bash|zsh)\b/;
 const REDIRECT_TO_DEVICE = />\s*\/dev\/(sd|nvme|vd)/;
 const FORK_BOMB = /:\(\)\s*\{/;
-const GIT_NO_FORCE = /(^|\s)(-f\b|--force\b)/; // -f/--force 在任意位置（含 rest 首 token）
+const GIT_NO_FORCE = /(^|\s)(-f\b|--force(?![\w-]))/; // -f/--force 在任意位置；--force-with-lease 是安全变体，不拦
 
 // git 子命令分桶（首 token 后跟子命令，两级匹配）
 const GIT_BLACK: Record<string, (args: string) => string | null> = {
@@ -24,7 +24,7 @@ const GIT_BLACK: Record<string, (args: string) => string | null> = {
 	"filter-branch": () => "git filter-branch",
 	rebase: () => "git rebase",
 	"cherry-pick": () => "git cherry-pick",
-	branch: (a) => (/(\s|^)(-D|-d)\b/.test(a) ? "git branch -D" : null),
+	branch: (a) => (/(\s|^)(-D|-d|--delete)\b/.test(a) ? "git branch -D" : null),
 };
 
 // —— 白名单 ——
@@ -36,8 +36,9 @@ const READ_ONLY_CMDS = new Set([
 ]);
 const GIT_WHITE = new Set(["status", "diff", "log", "show", "add", "commit", "branch"]);
 
-// 含 shell 元字符 → 白名单不生效，降灰（ls > ~/.bashrc、cat x | sudo tee y 的统一堵法）
-const HAS_METACHARS = /[|<>`;&]|\$\(/;
+// 含 shell 元字符（含换行/回车——bash 的命令分隔符）→ 白名单不生效，降灰
+// （ls > ~/.bashrc、cat x | sudo tee y、echo ok\nsudo x 的统一堵法）
+const HAS_METACHARS = /[|<>`;&\n\r]|\$\(/;
 
 function classifyGit(sub: string, rest: string): Verdict {
 	const black = GIT_BLACK[sub];

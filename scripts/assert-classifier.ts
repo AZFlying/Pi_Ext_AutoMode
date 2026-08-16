@@ -28,6 +28,11 @@ const cases: [string, string, string?][] = [
 	["find .", "gray"], // find 不白（-delete 洞）
 	["dd if=x of=/dev/sda", "blacklist", "dd of="],
 	["mkfs.ext4 /dev/sda", "blacklist", "mkfs"],
+	// 密查发现的洞/误伤
+	["echo ok\nsudo tee /etc/x", "gray"], // 换行是命令分隔符，不能按首 token echo 白放行
+	["git branch --delete x", "blacklist", "git branch -D"],
+	["git push --force-with-lease", "gray"], // 安全变体不拦
+	["git commit --amend", "whitelist"], // 可接受：本地可 reflog 恢复
 ];
 
 let fail = 0;
