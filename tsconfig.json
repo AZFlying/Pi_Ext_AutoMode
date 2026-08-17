@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"target": "es2022",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true,
+		"types": ["node"],
+		"baseUrl": ".",
+		"paths": {
+			"@earendil-works/pi-coding-agent": [
+				"/home/azflying/.local/share/pnpm/store/v11/links/@earendil-works/pi-coding-agent/0.84.1/5fc461a9dcbffae874a8268a061de0af284efd4ef928f5cb5f4e2f66091ef05e/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts"
+			]
+		}
+	},
+	"include": ["src", "scripts"]
+}
