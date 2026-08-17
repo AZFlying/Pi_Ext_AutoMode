@@ -1,5 +1,7 @@
 // classify() 自检：node --experimental-strip-types scripts/assert-classifier.ts
 import { classify } from "../src/classifier.ts";
+import { parseEvalResult } from "../src/evaluator.ts";
+import { familyKey } from "../src/session-rules.ts";
 
 const cases: [string, string, string?][] = [
 	["ls", "whitelist"],
@@ -50,5 +52,34 @@ for (const [cmd, kind, rule] of cases) {
 		console.error(`✗ ${cmd}\n    期望 ${kind}${rule ? ` (${rule})` : ""}，实际 ${v.kind}${v.kind === "blacklist" ? ` (${(v as any).rule})` : ""}`);
 	}
 }
-console.log(fail === 0 ? `✓ ${cases.length} cases all green` : `${fail} failed`);
+const evalCases: [string, string | null][] = [
+	['{"risk":"low","reason":"无害"}', "low"],
+	['```json\n{"risk":"medium","reason":"改状态可恢复"}\n```', "medium"],
+	['前置噪声 {"risk":"high","reason":"x"} 后置噪声', "high"],
+	['完全不是 JSON', null],
+	['{"risk":"extreme"}', null],
+	['{"risk":123}', null],
+];
+for (const [text, want] of evalCases) {
+	const got = parseEvalResult(text);
+	const ok = (want === null && got === null) || (got !== null && got.risk === want);
+	if (!ok) {
+		fail++;
+		console.error(`✗ parse ${JSON.stringify(text.slice(0, 40))} 期望 ${want}，实际 ${got ? got.risk : "null"}`);
+	}
+}
+
+const famCases: [string, string][] = [
+	["pip install requests", "pip"],
+	["git push origin main", "git push"],
+	["python -c x", "python"],
+];
+for (const [cmd, want] of famCases) {
+	if (familyKey(cmd) !== want) {
+		fail++;
+		console.error(`✗ familyKey(${cmd}) 期望 ${want}，实际 ${familyKey(cmd)}`);
+	}
+}
+
+console.log(fail === 0 ? `✓ ${cases.length} classify + ${evalCases.length} parse + ${famCases.length} family all green` : `${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

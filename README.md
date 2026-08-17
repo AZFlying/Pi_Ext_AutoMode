@@ -1,6 +1,6 @@
 # AutoMode — pi 扩展：bash 命令风险审批
 
-> 设计文档 + 构建 TODO。代码未开始实现，按下方 T1–T6 顺序逐步构建。
+> 设计文档 + 构建 TODO。**v1 已全部完成（2026-08-16，T1–T6）**，使用方式见手册 `~/.pi/agent/manuals/AutoMode_使用手册.md`。
 > API 细节与参考源码评估见 [HANDOFF.md](./HANDOFF.md)（已核实，勿重复调研）。
 
 ## 一、项目定位
@@ -79,12 +79,12 @@ package.json        pi.extensions 指向 src/index.ts（pi 直接加载 TS，无
 
 ## 五、构建 TODO（按序执行，每步可独立验证）
 
-- [ ] **T1 骨架接线**：package.json + src/index.ts，拦 bash 后无条件放行；`pi install /home/azflying/Projects/Development/Pi_Ext_AutoMode` 重启，验证 tool_call 能触发（notify 打点）
-- [ ] **T2 静态分类**：classifier.ts 白/黑名单 + git 分桶；黑名单走四选项弹窗；无 UI 场景 block
-- [ ] **T3 会话记忆**：session-rules.ts；用户选「本会话放行此类」后，同模式命令跳过一切后续检查
-- [ ] **T4 模型评估**：evaluator.ts + prompts.ts；灰色命令走 flash 评估；JSON 解析失败 fail-closed；low 静默放行、medium notify、high 弹窗
-- [ ] **T5 全流程验证**：跑完下方验证清单全部项
-- [ ] **T6 收尾**：`tsc --noEmit` 通过；建手册 `~/.pi/agent/manuals/`；变更日志新条目写入 `~/.pi/agent/Change_Log/Record_pi-skills.md`（放最前）
+- [x] **T1 骨架接线**：package.json + src/index.ts，拦 bash 后无条件放行；`pi install /home/azflying/Projects/Development/Pi_Ext_AutoMode` 重启，验证 tool_call 能触发（notify 打点）
+- [x] **T2 静态分类**：classifier.ts 白/黑名单 + git 分桶；黑名单走弹窗（三选项，按架构图仲裁，非「四选项」）；无 UI 场景 block
+- [x] **T3 会话记忆**：session-rules.ts；黑名单弹窗 [2] 记**精确命令串**（安全仲裁：首 token 会让 rm -rf ~ 溜过）
+- [x] **T4 模型评估**：evaluator.ts + prompts.ts；灰色命令走 flash 评估（registry.complete，非 advisor 双回退）；JSON 解析失败 fail-closed；low 静默放行、medium notify、high 弹窗（[2] 记首 token 族）
+- [x] **T5 全流程验证**：九项清单全过（2026-08-16）
+- [x] **T6 收尾**：tsc --noEmit ✅；手册 `manuals/AutoMode_使用手册.md`；变更日志 `Change_Log/Record_pi-automode.md`（新建，非 pi-skills：自建扩展独立成档）
 - [ ] **后续（不排期）**：write/edit path gate；medium 收紧开关；评估模型可配置化
 
 ## 六、验证清单（T5 用）
