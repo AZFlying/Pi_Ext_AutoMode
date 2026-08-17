@@ -40,6 +40,26 @@ const GIT_WHITE = new Set(["status", "diff", "log", "show", "add", "commit", "br
 // （ls > ~/.bashrc、cat x | sudo tee y、echo ok\nsudo x 的统一堵法）
 const HAS_METACHARS = /[|<>`;&\n\r]|\$\(/;
 
+// 复合命令拆段（与 classify 内拆段同一语义）
+const SEG_SPLIT = /\r|\n|&&|\|\||[;|&]/;
+
+// rm 段是否「全部操作数为绝对路径 /tmp/... 且无 .. 穿越段」→ 降灰交模型评估
+// 规则：多操作数全部须 /tmp/ 前缀；含 .. 即黑；/tmpfoo 前缀碰撞不算；精确 /tmp 不豁免；
+// 相对路径（含 cd /tmp && rm -rf x）不豁免；sudo rm 不受影响（sudo 黑桶在前）
+function rmSegSafe(seg: string): boolean {
+	const tokens = seg.trim().split(/\s+/);
+	if (tokens[0] !== "rm") return true; // 非 rm 开头的段不适用本豁免
+	const paths: string[] = [];
+	let endOpts = false;
+	for (const t of tokens.slice(1)) {
+		if (!endOpts && t === "--") { endOpts = true; continue; }
+		if (!endOpts && t.startsWith("-")) continue; // flag
+		paths.push(t);
+	}
+	if (paths.length === 0) return false; // 无操作数，保守维持黑
+	return paths.every((p) => p.startsWith("/tmp/") && !p.split("/").includes(".."));
+}
+
 function classifyGit(sub: string, rest: string): Verdict {
 	const black = GIT_BLACK[sub];
 	if (black) {
@@ -73,7 +93,11 @@ function classifySegment(seg: string): Verdict {
 
 export function classify(command: string): Verdict {
 	// 全串正则黑名单（必须在拆段前：拆段会吃掉 |，管道类规则就再也匹配不上了）
-	if (DANGEROUS_FLAGS.test(command)) return { kind: "blacklist", rule: "rm -r/-f" };
+	// rm：全部段的安全检查通过时跳过 rm 规则（降灰交模型评估）
+	if (
+		DANGEROUS_FLAGS.test(command) &&
+		!command.split(SEG_SPLIT).every((s) => rmSegSafe(s))
+	) return { kind: "blacklist", rule: "rm -r/-f" };
 	if (PIPE_TO_SHELL.test(command)) return { kind: "blacklist", rule: "pipe to shell" };
 	if (REDIRECT_TO_DEVICE.test(command)) return { kind: "blacklist", rule: "> /dev/sd*" };
 	if (FORK_BOMB.test(command)) return { kind: "blacklist", rule: "fork bomb" };
