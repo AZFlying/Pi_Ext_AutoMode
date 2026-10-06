@@ -3,6 +3,10 @@ import { classify } from "./classifier";
 import { evaluate } from "./evaluator";
 import { allow, allowFamily, isAllowed, isFamilyAllowed } from "./session-rules";
 
+// rm 已放开交模型，但含 rm 词元的命令在高危弹窗只提供精确串记忆：
+// 「放行此类」会放行整个 rm 族（含 rm -rf ~），是本次放开最确定的安全回退
+const RM_IN_COMMAND = /\brm\b/;
+
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		ctx.ui.notify("[AutoMode] loaded (T4 evaluator)", "info");
@@ -45,7 +49,7 @@ export default function (pi: ExtensionAPI) {
 
 		// high（含 degraded）
 		const tag = ev.degraded ? "（评估失败，按高危处理）" : "";
-		return dialog(ctx, `⚠️ 高危命令${tag}:\n\n  ${command}\n\n模型理由: ${ev.reason}`, command, true);
+		return dialog(ctx, `⚠️ 高危命令${tag}:\n\n  ${command}\n\n模型理由: ${ev.reason}`, command, !RM_IN_COMMAND.test(command));
 	});
 }
 
