@@ -1,7 +1,7 @@
 // 评估模型与系统 prompt（独立文件便于迭代）
 
 export const EVAL_PROVIDER = "deepseek";
-export const EVAL_MODEL_ID = "deepseek-v4-flash";
+export const EVAL_MODEL_ID = "deepseek-flash";
 
 export const EVAL_SYSTEM_PROMPT = `你是 bash 命令风险评估器。给定一条将在用户机器上执行的命令，评估其风险等级。只输出一行 JSON，不要任何其他文字：
 {"risk":"low|medium|high","reason":"一句话理由（中文）"}

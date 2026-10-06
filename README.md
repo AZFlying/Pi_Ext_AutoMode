@@ -21,7 +21,7 @@ pi.on("tool_call")  只拦 toolName === "bash"
    ↓
 ② 会话记忆命中？（首 token 模式，如 rm *、git push*）→ 命中则放行
    ↓
-③ 模型评估：deepseek/deepseek-v4-flash（常量 EVAL_MODEL，可改）
+③ 模型评估：deepseek/deepseek-flash（常量 EVAL_MODEL，可改）
    completeSimple，系统 prompt 要求只输出 {"risk":"low|medium|high","reason":"..."}
    解析失败/调用失败/超时 → fail-closed 按 high 弹窗
    ↓
@@ -41,7 +41,7 @@ pi.on("tool_call")  只拦 toolName === "bash"
 
 | 决策 | 结论 |
 |---|---|
-| 评估模型 | `deepseek/deepseek-v4-flash`（写死为常量 `EVAL_MODEL`，注释可改） |
+| 评估模型 | `deepseek/deepseek-flash`（写死为常量 `EVAL_MODEL`，注释可改） |
 | medium 处理 | `ctx.ui.notify` 轻提示 + 放行（先跑起来观察，烦了再收紧） |
 | v1 范围 | bash 命令拦截，**含 git 子命令专项规则**；write/edit path gate 后续 |
 | 会话记忆粒度 | 命令首 token 模式（git 命令记 `git <subcmd>` 两级） |
