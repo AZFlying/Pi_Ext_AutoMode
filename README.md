@@ -37,7 +37,7 @@ pi.on("tool_call")  只拦 toolName === "bash"
 
 **性能预算**：灰色命令评估耗时 +2~4s（一次 completeSimple 调用）；白/黑名单与会话记忆命中 0 开销。
 
-### 已定决策（2026-08-15 拍板）
+### 已定决策（滚动拍板）
 
 | 决策 | 结论 |
 |---|---|
@@ -45,6 +45,7 @@ pi.on("tool_call")  只拦 toolName === "bash"
 | medium 处理 | `ctx.ui.notify` 轻提示 + 放行（先跑起来观察，烦了再收紧） |
 | v1 范围 | bash 命令拦截，**含 git 子命令专项规则**；write/edit path gate 后续 |
 | 会话记忆粒度 | 命令首 token 模式（git 命令记 `git <subcmd>` 两级） |
+| 黑名单收敛（2026-09-10） | rm、pipe-to-shell 降灰交模型；含 rm 的高危弹窗只记精确串 |
 
 ### git 子命令分桶（初版常量清单，随手可改）
 
@@ -93,7 +94,7 @@ package.json        pi.extensions 指向 src/index.ts（pi 直接加载 TS，无
 2. `ls` → 零延迟放行，无弹窗
 3. `git status` → 零延迟放行（git 白名单）
 4. 灰色命令（如 `python setup.py`）→ 2~4s 评估后按风险分流
-5. `rm -rf /tmp/test` → 弹窗，显示模型理由
+5. `rm -rf /tmp/test` → 评估后分流（low/medium 放行，high 弹窗显示模型理由）
 6. `git push --force` → 直接弹窗（黑名单，不经模型）
 7. 选「本会话放行此类」后，同模式命令不再评估
 8. 断网/坏 key 状态下跑灰色命令 → 弹窗而非放行（fail-closed）
